@@ -1,0 +1,39 @@
+Tasks: FT
+ 
+FrontEnd Tasks
+	--> Update the UI on the deletion of the Dashboard.
+
+BackEnd Tasks
+	--> Configuring a seperate digital_blanket database and tested from scratch.
+	--> Worked on Embassy prompt changes.
+	--> Modifying text datasources of embassy to improve accuracy.
+	--> setting up Gemini llm.
+	--> Conduct accuracy and use-case testing for the Gemini API.
+	--> Creating views on capitaland database.
+	--> Setting up and configuring Capitaland.
+	--> Modifying text datasources to improve accuracy.
+	--> Creating TOD reports for embassy	
+		-> L1 Building Energy Consumption Reports (past 24hrs, previous day, previous month) 
+		-> L2 Building Energy Consumption Reports (past 24hrs, previous day, previous month) 
+		-> Energy consumption: L1 Building vs L2 Building
+		-> Energy Consumption of Energy Meters Tenants
+		-> Energy Consumption of BTU Meters Tenants
+		-> Total Consumption of Energy Meters for all the Tenants for previous calendar month.
+	--> Creating Reports for CaptialLand
+		-> Calculating Unbalanced Current for single systems and Multiple systems
+		-> Calculating Unbalanced Voltage for single systems and Multiple systems
+		-> Calculating Unbalanced Current: 24hrs hourly Trend
+		-> Calculating Unbalanced Voltage: 24hrs hourly Trend
+		-> Reporting for Atria Building
+
+
+    --> removed gemini.
+    --> fixed issue bigint to timestamp.
+    --> Updated prompt
+    --> added dashboard in captaland (https://dev.digitalblanket.io/)
+    --> updating the date&time to readable format (i2m)
+    --> added skill set in embassy
+    --> Took backup of all mongodb databases
+    --> updated schema and prompt
+    --> added dynAttribute3, dynAttribute4 in embassy
+    --> documenting adding agents, editing prompt, editing schema, adding text source.
