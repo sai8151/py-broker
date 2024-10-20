@@ -124,7 +124,7 @@ def submit_seller_bill():
     try:
         # Fetch broker bills for the logged-in seller
         broker_bills = pd.read_sql(
-            text('SELECT * FROM broker_bills WHERE seller_id = :seller_id AND status != "accepted"'), 
+            text('SELECT * FROM broker_bills WHERE seller_id = :seller_id AND status = "not accepted"'), 
             con=session.bind, 
             params={'seller_id': st.session_state.current_user}
         )
@@ -141,7 +141,8 @@ def submit_seller_bill():
             # Extract the buyer ID and agent ID from the selected broker bill
             buyer_id = selected_broker_bill.iloc[0]['buyer_id']
             agent_id = selected_broker_bill.iloc[0]['agent_id']  # Get the agent_id directly
-
+            status=selected_broker_bill.iloc[0]['status']
+            st.write(status)
             # Ensure agent_id is in the correct format (string for text storage)
             agent_id_str = str(agent_id)
 
@@ -247,7 +248,7 @@ def submit_seller_bill():
                 st.text_input("Bank Name 2", value=bank_details['bank_name_2'], disabled=True)
                 st.text_input("Bank Account Number 2", value=bank_details['bank_account_number_2'], disabled=True)
                 st.text_input("IFSC Code 2", value=bank_details['ifsc_code_2'], disabled=True)
-
+                # status = st.selectbox("Select Status", ["completed", "pending"])
                 # Submit button
                 if st.button("Submit Bill"):
                     try:
@@ -258,14 +259,14 @@ def submit_seller_bill():
                                  'billing_phone_number, billing_gst_number, shipping_name, shipping_address, shipping_city, '
                                  'shipping_state, shipping_phone_number, shipping_gst_number, broker_name, seller_name, '
                                  'total_amount, bank_name_1, bank_account_number_1, ifsc_code_1, bank_name_2, '
-                                 'bank_account_number_2, ifsc_code_2, broker_bill_id, agent_id) VALUES '
+                                 'bank_account_number_2, ifsc_code_2, broker_bill_id, agent_id, status) VALUES '
                                  '(:seller_id, :driver_name, :driver_phone_number, :vehicle_number, :transport_name, '
                                  ':reverse_charges, :invoice_number, :date_of_invoice, :delivery_date, :waybill_number, '
                                  ':mep_number, :billing_name, :billing_address, :billing_city, :billing_state, '
                                  ':billing_phone_number, :billing_gst_number, :shipping_name, :shipping_address, '
                                  ':shipping_city, :shipping_state, :shipping_phone_number, :shipping_gst_number, '
                                  ':broker_name, :seller_name, :total_amount, :bank_name_1, :bank_account_number_1, '
-                                 ':ifsc_code_1, :bank_name_2, :bank_account_number_2, :ifsc_code_2, :broker_bill_id, :agent_id)'),
+                                 ':ifsc_code_1, :bank_name_2, :bank_account_number_2, :ifsc_code_2, :broker_bill_id, :agent_id, :status)'),
                             {
                                 'seller_id': st.session_state.current_user,
                                 'driver_name': driver_name,
@@ -301,14 +302,17 @@ def submit_seller_bill():
                                 'bank_name_2': bank_details['bank_name_2'],
                                 'bank_account_number_2': bank_details['bank_account_number_2'],
                                 'ifsc_code_2': bank_details['ifsc_code_2'],
+                                'status':"pending",
                             }
                         )
+                        session.commit()
+                        st.success("Bill submitted successfully.")
                         # Update the status of the broker bill to 'accepted'
                         session.execute(
                             text('UPDATE broker_bills SET status = :status WHERE id = :broker_bill_id'),
-                            {'status': 'accepted', 'broker_bill_id': broker_bill_id})
+                            {'status': 'completed', 'broker_bill_id': broker_bill_id})
                         session.commit()
-                        st.success("Bill submitted successfully.")
+                        st.success("Bill updated successfully.")
                     except Exception as e:
                         session.rollback()
                         st.error(f"Error submitting bill: {e}")
@@ -316,7 +320,6 @@ def submit_seller_bill():
                 st.error("No buyer details found for the selected broker bill.")
         else:
             st.error("No broker bill selected.")
-
     finally:
         session.close()
 
@@ -333,6 +336,7 @@ def view_bills_page():
                 con=engine, 
                 params={'seller_id': seller_id}
             )
+            st.write(seller_id)
             if not bills.empty:
                 st.dataframe(bills)
             else:
@@ -353,20 +357,38 @@ def view_bills_pdf(status):
         seller_id = st.session_state.current_user
         session = Session()
         try:
+            # Normalize the status to lower case
+            normalized_status = status.lower()
+            st.write(f"Seller ID from session: {seller_id}")
+            
+            # Prepare the SQL query
+            query = text('SELECT * FROM sellerBill WHERE seller_id = :seller_id AND LOWER(status) = LOWER(:status)')
+            params = {'seller_id': seller_id, 'status': normalized_status}
+
+            # Display the SQL query and parameters
+            st.write(f"SQL Query: {query}")
+            st.write(f"Parameters: {params}")
+
             # Fetch bills for the logged-in seller
             bills = pd.read_sql(
-                text('SELECT * FROM sellerBill WHERE seller_id = :seller_id AND status = :status'),
+                query,
                 con=session.bind,
-                params={'seller_id': seller_id, 'status': status}
+                params=params
             )
 
+            st.write(bills)  # Check fetched bills
+
+            # Handle empty bills case
             if bills.empty:
-                st.write(f"No {status.lower()} bills found for this seller.")
+                st.write(f"No {normalized_status} bills found for this seller.")
                 return
             
             # Dropdown to select a bill
-            selected_bill_id = st.selectbox("Select Bill", bills['id'].tolist(), 
-                                              format_func=lambda x: bills.loc[bills['id'] == x, 'invoice_number'].values[0])
+            selected_bill_id = st.selectbox(
+                "Select Bill", 
+                bills['id'].tolist(),
+                format_func=lambda x: bills.loc[bills['id'] == x, 'invoice_number'].values[0]
+            )
 
             if st.button("View PDF"):
                 bill_details = bills[bills['id'] == selected_bill_id].iloc[0]
@@ -382,7 +404,7 @@ def view_bills_pdf(status):
                     return
                 
                 # Create PDF
-                pdf_buffer = create_pdf(bill_details, products, status.lower())
+                pdf_buffer = create_pdf(bill_details, products, normalized_status)
 
                 # Encode the PDF for embedding
                 pdf_data = pdf_buffer.getvalue()
@@ -390,7 +412,10 @@ def view_bills_pdf(status):
 
                 # Display PDF in the app
                 st.write("### Bill PDF:")
-                st.markdown(f'<embed src="data:application/pdf;base64,{b64_pdf}" width="700" height="500" type="application/pdf">', unsafe_allow_html=True)
+                st.markdown(
+                    f'<embed src="data:application/pdf;base64,{b64_pdf}" width="700" height="500" type="application/pdf">',
+                    unsafe_allow_html=True
+                )
 
                 # Add download button
                 st.download_button("Download PDF", data=pdf_data, file_name="bill.pdf", mime="application/pdf")
@@ -527,7 +552,10 @@ def create_pdf(bill_details, products, status):
     # Section 8: Authorised Signatory and Status
     elements.append(Paragraph("Authorised Signatory:", styles['Normal']))
     elements.append(Paragraph("_______________________", styles['Normal']))
-    elements.append(Paragraph(f"Status: {bill_details['status']}", styles['Normal']))
+    if bill_details['brokerage']=='None' or bill_details['brokerage']==0 or bill_details['brokerage']==None:
+        elements.append(Paragraph(f"Status: pending", styles['Normal']))
+    else:
+        elements.append(Paragraph(f"Status: completed", styles['Normal']))
     elements.append(Spacer(1, 0.2 * inch))
 
     # Build PDF

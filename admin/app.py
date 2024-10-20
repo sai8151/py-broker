@@ -68,7 +68,7 @@ class SellerBill(Base):
     ifsc_code_2 = Column(String, default='-')
 
     brokerage = Column(Float, default=0)
-    status = Column(String, default='Pending')
+    status = Column(String, default='pending')
 
 
 class Buyer(Base):
@@ -285,13 +285,62 @@ def view_and_edit_bills():
 
     try:
         bills = pd.read_sql('SELECT * FROM sellerBill', con=engine)
-        # st.write(bills)
-        if not bills.empty:
-            edited_bills = st.data_editor(bills, key="bills_editor")
 
-            if st.button("Update Bills"):
-                try:
-                    for index, row in edited_bills.iterrows():
+        if not bills.empty:
+            # Select a bill to edit
+            selected_bill_id = st.selectbox(
+                "Select Bill to Edit", 
+                bills['id'].tolist(),
+                format_func=lambda x: f"Bill ID: {x} - Invoice: {bills.loc[bills['id'] == x, 'invoice_number'].values[0]}"
+            )
+
+            # Get selected bill details
+            selected_bill = bills[bills['id'] == selected_bill_id].iloc[0]
+
+            # Display all fields in a form for editing
+            with st.form(key="bill_edit_form"):
+                driver_name = st.text_input("Driver Name", value=selected_bill['driver_name'])
+                driver_phone_number = st.text_input("Driver Phone Number", value=selected_bill['driver_phone_number'])
+                vehicle_number = st.text_input("Vehicle Number", value=selected_bill['vehicle_number'])
+                transport_name = st.text_input("Transport Name", value=selected_bill['transport_name'])
+                reverse_charges = st.text_input("Reverse Charges", value=selected_bill['reverse_charges'])
+                invoice_number = st.text_input("Invoice Number", value=selected_bill['invoice_number'])
+                date_of_invoice = st.date_input("Date of Invoice", value=pd.to_datetime(selected_bill['date_of_invoice']))
+                delivery_date = st.date_input("Delivery Date", value=pd.to_datetime(selected_bill['delivery_date']))
+                waybill_number = st.text_input("Waybill Number", value=selected_bill['waybill_number'])
+                mep_number = st.text_input("MEP Number", value=selected_bill['mep_number'])
+                billing_name = st.text_input("Billing Name", value=selected_bill['billing_name'])
+                billing_address = st.text_input("Billing Address", value=selected_bill['billing_address'])
+                billing_city = st.text_input("Billing City", value=selected_bill['billing_city'])
+                billing_state = st.text_input("Billing State", value=selected_bill['billing_state'])
+                billing_phone_number = st.text_input("Billing Phone Number", value=selected_bill['billing_phone_number'])
+                billing_gst_number = st.text_input("Billing GST Number", value=selected_bill['billing_gst_number'])
+                shipping_name = st.text_input("Shipping Name", value=selected_bill['shipping_name'])
+                shipping_address = st.text_input("Shipping Address", value=selected_bill['shipping_address'])
+                shipping_city = st.text_input("Shipping City", value=selected_bill['shipping_city'])
+                shipping_state = st.text_input("Shipping State", value=selected_bill['shipping_state'])
+                shipping_phone_number = st.text_input("Shipping Phone Number", value=selected_bill['shipping_phone_number'])
+                shipping_gst_number = st.text_input("Shipping GST Number", value=selected_bill['shipping_gst_number'])
+                broker_name = st.text_input("Broker Name", value=selected_bill['broker_name'])
+                seller_name = st.text_input("Seller Name", value=selected_bill['seller_name'])
+                total_amount = st.number_input("Total Amount", value=selected_bill['total_amount'])
+                bank_name_1 = st.text_input("Bank Name 1", value=selected_bill['bank_name_1'])
+                bank_account_number_1 = st.text_input("Bank Account Number 1", value=selected_bill['bank_account_number_1'])
+                ifsc_code_1 = st.text_input("IFSC Code 1", value=selected_bill['ifsc_code_1'])
+                bank_name_2 = st.text_input("Bank Name 2", value=selected_bill['bank_name_2'])
+                bank_account_number_2 = st.text_input("Bank Account Number 2", value=selected_bill['bank_account_number_2'])
+                ifsc_code_2 = st.text_input("IFSC Code 2", value=selected_bill['ifsc_code_2'])
+                brokerage = st.number_input("Brokerage", value=selected_bill['brokerage'], min_value=0.0)
+
+                # Form submit button
+                submitted = st.form_submit_button("Update Bill")
+
+                if submitted:
+                    try:
+                        # Set status based on brokerage
+                        status = 'pending' if brokerage == 0 or pd.isnull(brokerage) else 'completed'
+
+                        # Update the selected bill
                         session.execute(
                             text('UPDATE sellerBill SET driver_name = :driver_name, driver_phone_number = :driver_phone_number, '
                                  'vehicle_number = :vehicle_number, transport_name = :transport_name, reverse_charges = :reverse_charges, '
@@ -304,114 +353,49 @@ def view_and_edit_bills():
                                  'shipping_gst_number = :shipping_gst_number, broker_name = :broker_name, seller_name = :seller_name, '
                                  'total_amount = :total_amount, bank_name_1 = :bank_name_1, bank_account_number_1 = :bank_account_number_1, '
                                  'ifsc_code_1 = :ifsc_code_1, bank_name_2 = :bank_name_2, bank_account_number_2 = :bank_account_number_2, '
-                                 'ifsc_code_2 = :ifsc_code_2, brokerage = :brokerage, status = :status WHERE id = :id'), 
+                                 'ifsc_code_2 = :ifsc_code_2, brokerage = :brokerage, status = :status WHERE id = :id'),
                             {
-                                'driver_name': row['driver_name'],
-                                'driver_phone_number': row['driver_phone_number'],
-                                'vehicle_number': row['vehicle_number'],
-                                'transport_name': row['transport_name'],
-                                'reverse_charges': row['reverse_charges'],
-                                'invoice_number': row['invoice_number'],
-                                'date_of_invoice': row['date_of_invoice'],
-                                'delivery_date': row['delivery_date'],
-                                'waybill_number': row['waybill_number'],
-                                'mep_number': row['mep_number'],
-                                'billing_name': row['billing_name'],
-                                'billing_address': row['billing_address'],
-                                'billing_city': row['billing_city'],
-                                'billing_state': row['billing_state'],
-                                'billing_phone_number': row['billing_phone_number'],
-                                'billing_gst_number': row['billing_gst_number'],
-                                'shipping_name': row['shipping_name'],
-                                'shipping_address': row['shipping_address'],
-                                'shipping_city': row['shipping_city'],
-                                'shipping_state': row['shipping_state'],
-                                'shipping_phone_number': row['shipping_phone_number'],
-                                'shipping_gst_number': row['shipping_gst_number'],
-                                'broker_name': row['broker_name'],
-                                'seller_name': row['seller_name'],
-                                'total_amount': row['total_amount'],
-                                'bank_name_1': row['bank_name_1'],
-                                'bank_account_number_1': row['bank_account_number_1'],
-                                'ifsc_code_1': row['ifsc_code_1'],
-                                'bank_name_2': row['bank_name_2'],
-                                'bank_account_number_2': row['bank_account_number_2'],
-                                'ifsc_code_2': row['ifsc_code_2'],
-                                'brokerage': row['brokerage'],
-                                'status': row['status'],
-                                'id': row['id']
+                                'driver_name': driver_name,
+                                'driver_phone_number': driver_phone_number,
+                                'vehicle_number': vehicle_number,
+                                'transport_name': transport_name,
+                                'reverse_charges': reverse_charges,
+                                'invoice_number': invoice_number,
+                                'date_of_invoice': date_of_invoice,
+                                'delivery_date': delivery_date,
+                                'waybill_number': waybill_number,
+                                'mep_number': mep_number,
+                                'billing_name': billing_name,
+                                'billing_address': billing_address,
+                                'billing_city': billing_city,
+                                'billing_state': billing_state,
+                                'billing_phone_number': billing_phone_number,
+                                'billing_gst_number': billing_gst_number,
+                                'shipping_name': shipping_name,
+                                'shipping_address': shipping_address,
+                                'shipping_city': shipping_city,
+                                'shipping_state': shipping_state,
+                                'shipping_phone_number': shipping_phone_number,
+                                'shipping_gst_number': shipping_gst_number,
+                                'broker_name': broker_name,
+                                'seller_name': seller_name,
+                                'total_amount': total_amount,
+                                'bank_name_1': bank_name_1,
+                                'bank_account_number_1': bank_account_number_1,
+                                'ifsc_code_1': ifsc_code_1,
+                                'bank_name_2': bank_name_2,
+                                'bank_account_number_2': bank_account_number_2,
+                                'ifsc_code_2': ifsc_code_2,
+                                'brokerage': brokerage,
+                                'status': status,
+                                'id': selected_bill_id
                             }
-                        )
-                    session.commit()
-                    st.success("Bills updated successfully.")
-                except Exception as e:
-                    session.rollback()
-                    st.error(f"Error updating bills: {e}")
-
-            # Delete option for each bill
-            # Delete option for each bill
-            bill_to_delete = st.selectbox("Select Bill to Delete", options=bills['id'].tolist(), format_func=lambda x: f"Bill ID: {x}")
-            if st.button("Delete Bill"):
-                try:
-                    # Retrieve the bill to move to deleted_sellerBills
-                    bill_to_move = session.execute(
-                        text('SELECT * FROM sellerBill WHERE id = :id'), 
-                        {'id': bill_to_delete}
-                    ).fetchone()
-
-                    if bill_to_move:
-                        # Insert the bill into deleted_sellerBills
-                        session.execute(
-                            text('INSERT INTO deleted_sellerBills (seller_id, driver_name, driver_phone_number, vehicle_number, transport_name, reverse_charges, invoice_number, date_of_invoice, delivery_date, waybill_number, mep_number, billing_name, billing_address, billing_city, billing_state, billing_phone_number, billing_gst_number, shipping_name, shipping_address, shipping_city, shipping_state, shipping_phone_number, shipping_gst_number, broker_name, seller_name, total_amount, bank_name_1, bank_account_number_1, ifsc_code_1, bank_name_2, bank_account_number_2, ifsc_code_2, brokerage, status) VALUES (:seller_id, :driver_name, :driver_phone_number, :vehicle_number, :transport_name, :reverse_charges, :invoice_number, :date_of_invoice, :delivery_date, :waybill_number, :mep_number, :billing_name, :billing_address, :billing_city, :billing_state, :billing_phone_number, :billing_gst_number, :shipping_name, :shipping_address, :shipping_city, :shipping_state, :shipping_phone_number, :shipping_gst_number, :broker_name, :seller_name, :total_amount, :bank_name_1, :bank_account_number_1, :ifsc_code_1, :bank_name_2, :bank_account_number_2, :ifsc_code_2, :brokerage, :status)'), 
-                            {
-                                'seller_id': bill_to_move.seller_id,
-                                'driver_name': bill_to_move.driver_name,
-                                'driver_phone_number': bill_to_move.driver_phone_number,
-                                'vehicle_number': bill_to_move.vehicle_number,
-                                'transport_name': bill_to_move.transport_name,
-                                'reverse_charges': bill_to_move.reverse_charges,
-                                'invoice_number': bill_to_move.invoice_number,
-                                'date_of_invoice': bill_to_move.date_of_invoice,
-                                'delivery_date': bill_to_move.delivery_date,
-                                'waybill_number': bill_to_move.waybill_number,
-                                'mep_number': bill_to_move.mep_number,
-                                'billing_name': bill_to_move.billing_name,
-                                'billing_address': bill_to_move.billing_address,
-                                'billing_city': bill_to_move.billing_city,
-                                'billing_state': bill_to_move.billing_state,
-                                'billing_phone_number': bill_to_move.billing_phone_number,
-                                'billing_gst_number': bill_to_move.billing_gst_number,
-                                'shipping_name': bill_to_move.shipping_name,
-                                'shipping_address': bill_to_move.shipping_address,
-                                'shipping_city': bill_to_move.shipping_city,
-                                'shipping_state': bill_to_move.shipping_state,
-                                'shipping_phone_number': bill_to_move.shipping_phone_number,
-                                'shipping_gst_number': bill_to_move.shipping_gst_number,
-                                'broker_name': bill_to_move.broker_name,
-                                'seller_name': bill_to_move.seller_name,
-                                'total_amount': bill_to_move.total_amount,
-                                'bank_name_1': bill_to_move.bank_name_1,
-                                'bank_account_number_1': bill_to_move.bank_account_number_1,
-                                'ifsc_code_1': bill_to_move.ifsc_code_1,
-                                'bank_name_2': bill_to_move.bank_name_2,
-                                'bank_account_number_2': bill_to_move.bank_account_number_2,
-                                'ifsc_code_2': bill_to_move.ifsc_code_2,
-                                'brokerage': bill_to_move.brokerage,
-                                'status': bill_to_move.status
-                            }
-                        )
-                        # Now delete the original bill
-                        session.execute(
-                            text('DELETE FROM sellerBill WHERE id = :id'), 
-                            {'id': bill_to_delete}
                         )
                         session.commit()
-                        st.success("Bill deleted successfully and moved to deleted seller bills.")
-                    else:
-                        st.error("Bill not found.")
-                except Exception as e:
-                    session.rollback()
-                    st.error(f"Error deleting bill: {e}")
+                        st.success("Bill updated successfully.")
+                    except Exception as e:
+                        session.rollback()
+                        st.error(f"Error updating bill: {e}")
 
         else:
             st.write("No bills available.")
