@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, Date, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 import altair as alt
 import plotly.express as px
+import base64
 
 # Database connection and model setup
 engine = create_engine("sqlite://///home/zorin/webtech/py/db's/app_data5.db")
@@ -285,7 +286,7 @@ def view_and_edit_bills():
 
     try:
         bills = pd.read_sql('SELECT * FROM sellerBill', con=engine)
-
+        st.write(bills)
         if not bills.empty:
             # Select a bill to edit
             selected_bill_id = st.selectbox(
@@ -887,12 +888,13 @@ def view_broker_bills():
             # Display basic bill details
             st.write("### Broker Bill Details")
             st.write(pd.DataFrame([bill_details]))
+            st.write(bill_details['agent_id'])
 
             # Fetch and display agent, seller, buyer info
             agent_info = pd.read_sql(
                 text('SELECT * FROM agents WHERE id = :agent_id'),
                 con=session.bind,
-                params={'agent_id': bill_details['agent_id']}
+                params={'agent_id': int(bill_details['agent_id'])}
             )
 
             seller_info = pd.read_sql(
@@ -906,7 +908,6 @@ def view_broker_bills():
                 con=session.bind,
                 params={'buyer_id': bill_details['buyer_id']}
             )
-
             if not agent_info.empty:
                 st.write("### Agent Info")
                 st.dataframe(agent_info)
@@ -931,8 +932,155 @@ def view_broker_bills():
                 st.dataframe(bill_details_df)
             else:
                 st.write("No bill details found for this broker bill.")
+            # Display the PDF generation button
+            if st.button("Generate PDF"):
+                pdf_buffer = create_broker_bill_pdf(bill_details, agent_info, seller_info, buyer_info, bill_details_df)
 
+                # View the PDF
+                display_pdf(pdf_buffer.getvalue())
+
+                # Download the PDF
+                st.download_button(
+                    label="Download PDF",
+                    data=pdf_buffer,
+                    file_name=f"broker_bill_{selected_bill_id}.pdf",
+                    mime="application/pdf"
+                )
+    
     session.close()
+# Function to display PDF inline in the Streamlit app
+def display_pdf(pdf_data):
+    base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="1000" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
+
+import io
+from reportlab.lib.pagesizes import letter, A1
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
+def create_broker_bill_pdf(bill_details, agent_info, seller_info, buyer_info, bill_details_df):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=0.8 * inch, rightMargin=0.5 * inch)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Section 1: Bill Details
+    elements.append(Paragraph(f"Broker Bill ID: {bill_details['id']}", styles['Title']))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    bill_data = [
+        ["Order Date", bill_details['order_date'], "Order Number", bill_details['order_number']],
+        ["Total Tons", bill_details['total_tons'], "Status", bill_details['status']],
+        ["Seller ID", bill_details['seller_id'], "Buyer ID", bill_details['buyer_id']],
+    ]
+
+    bill_table = Table(bill_data, colWidths=[1.75 * inch] * 4)
+    bill_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    elements.append(bill_table)
+    elements.append(Spacer(0.3, 0.1 * inch))
+
+    # Section 2: Agent Info
+    if not agent_info.empty:
+        elements.append(Paragraph("Agent Information", styles['Heading2']))
+
+        # Create a new list to hold rows for the agent table
+        agent_data = []
+
+        # Loop through each column in the DataFrame
+        for column in agent_info.columns:
+            # Create a new row for each field
+            agent_data.append([column, agent_info[column].iloc[0]])  # Assuming you want the first agent's details
+
+        # Create a table from the list of rows
+        agent_table = Table(agent_data, colWidths=[2.0 * inch, 3.0 * inch])  # Adjust widths as necessary
+        agent_table.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), 1, colors.black)]))
+
+        elements.append(agent_table)
+        elements.append(Spacer(0.3, 0.1 * inch))
+
+
+    # Section 3: Seller Info
+    if not seller_info.empty:
+        elements.append(Paragraph("Seller Information", styles['Heading2']))
+
+        # Transform seller_info into a list of lists for rows
+        seller_data = [['Field', 'Value']] + [[column, seller_info.iloc[0][column]] for column in seller_info.columns]
+
+        # Create the seller table with fields in rows
+        seller_table = Table(seller_data, colWidths=[2.0 * inch, 4.0 * inch])
+        seller_table.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),  # Header background color
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),  # Header text color
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),               # Header text alignment
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),    # Header font
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),             # Padding for the header
+        ]))
+
+        elements.append(seller_table)
+        elements.append(Spacer(1, 0.2 * inch))
+
+    # Section 4: Buyer Info
+    if not buyer_info.empty:
+        elements.append(Paragraph("Buyer Information", styles['Heading2']))
+
+        # Transform buyer_info into a list of lists for rows
+        buyer_data = [['Field', 'Value']] + [[column, buyer_info.iloc[0][column]] for column in buyer_info.columns]
+
+        # Create the buyer table with fields in rows
+        buyer_table = Table(buyer_data, colWidths=[2.0 * inch, 4.0 * inch])
+        buyer_table.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),  # Header background color
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),  # Header text color
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),               # Header text alignment
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),    # Header font
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),             # Padding for the header
+        ]))
+
+        elements.append(buyer_table)
+        elements.append(Spacer(1, 0.2 * inch))
+
+
+    # Section 5: Detailed Bill Information
+    if not bill_details_df.empty:
+        elements.append(Paragraph("Bill Details", styles['Heading2']))
+
+        # Add the column headers (table names) to the table data
+        bill_details_data = [bill_details_df.columns.tolist()] + bill_details_df.values.tolist()
+
+        # Create the table with the headers
+        bill_details_table = Table(bill_details_data, colWidths=[0.9 * inch] * len(bill_details_df.columns))
+
+        # Apply a style to the table
+        bill_details_table.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.black),  # Header background color
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),  # Header text color
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),               # Header text alignment
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),    # Header font
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),             # Padding for the header
+        ]))
+
+        elements.append(bill_details_table)
+        elements.append(Spacer(1, 0.2 * inch))
+
+
+    # Build PDF
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
 
 def view_deleted_seller_bills():
     st.subheader("View Deleted Seller Bills")
