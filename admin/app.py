@@ -5,6 +5,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 import altair as alt
 import plotly.express as px
 import base64
+from datetime import date
 
 # Database connection and model setup
 engine = create_engine("sqlite://///home/zorin/webtech/py/db's/app_data5.db")
@@ -1095,10 +1096,96 @@ def view_deleted_seller_bills():
         st.error(f"Error retrieving deleted seller bills: {e}")
     finally:
         session.close()
+        
+def view_bills_based_on_selected_broker_buyer_seller():
+    session = Session()
+    try:
+        # Fetch available buyers, sellers, and agents
+        buyers = session.execute(text("SELECT id, billing_name FROM buyers")).fetchall()
+        sellers = session.execute(text("SELECT seller_id, seller_name FROM users")).fetchall()
+        agents = session.execute(text("SELECT id, name FROM agents")).fetchall()
+
+        # Convert query results to dataframes
+        buyers_df = pd.DataFrame(buyers, columns=['id', 'billing_name'])
+        sellers_df = pd.DataFrame(sellers, columns=['seller_id', 'seller_name'])
+        agents_df = pd.DataFrame(agents, columns=['id', 'name'])
+
+        # Selection inputs
+        selected_buyer = st.selectbox("Select Buyer", buyers_df['billing_name'])
+        selected_seller = st.selectbox("Select Seller", sellers_df['seller_name'])
+        selected_agent = st.selectbox("Select Agent", agents_df['name'])
+
+        start_date = st.date_input("Start Date", date.today())
+        end_date = st.date_input("End Date", date.today())
+
+        # Fetch selected buyer, seller, and agent IDs
+        buyer_id = buyers_df[buyers_df['billing_name'] == selected_buyer]['id'].values[0]
+        seller_id = sellers_df[sellers_df['seller_name'] == selected_seller]['seller_id'].values[0]
+        agent_id = agents_df[agents_df['name'] == selected_agent]['id'].values[0]
+
+        # Fetch broker_bill_id based on selected buyer, seller, and agent
+        broker_bill = session.execute(text("""
+            SELECT id
+            FROM broker_bills
+            WHERE buyer_id = :buyer_id
+            AND seller_id = :seller_id
+            AND agent_id = :agent_id
+        """), {'buyer_id': str(buyer_id), 'seller_id': str(seller_id), 'agent_id': int(agent_id)}).fetchone()
+        st.write(broker_bill)
+        if broker_bill:
+            broker_bill_id = broker_bill[0]
+
+            query = text("""
+            SELECT *
+            FROM sellerBill
+            WHERE broker_bill_id = :broker_bill_id
+            AND date_of_invoice BETWEEN :start_date AND :end_date
+            """)
+
+            # Debug output
+            st.write("Broker Bill ID:", broker_bill_id)
+
+            # Convert date inputs to strings in 'YYYY-MM-DD' format
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+
+            # Debug output
+            st.write("Start Date:", start_date_str)
+            st.write("End Date:", end_date_str)
+
+            # Execute the query with the correct data types
+            bills = session.execute(query, {
+                'broker_bill_id': broker_bill_id, 
+                'start_date': start_date_str,
+                'end_date': end_date_str
+            }).fetchall()
+
+            st.write(query)
+            if bills:
+                # Convert result to dataframe for display
+                bills_df = pd.DataFrame(bills)
+                st.write("### Bills for the selected filters")
+                st.dataframe(bills_df)
+
+                # Calculate total bags and amount
+                total_bags = bills_df['product_bags'].sum()
+                total_amount = bills_df['total_amount'].sum()
+
+                # Display total bags and amount
+                st.write(f"**Total Bags**: {total_bags}")
+                st.write(f"**Total Amount**: {total_amount}")
+            else:
+                st.write("No bills found for the selected criteria")
+        else:
+            st.write("No broker bill found for the selected buyer, seller, and agent")
+    except Exception as e:
+        st.error(f"Error retrieving bills: {e}")
+    finally:
+        session.close()
 
 def main():
     st.sidebar.title("Admin Menu")
-    page = st.sidebar.selectbox("Choose a page", ["Initiate Broker Bill","View Broker Bills", "Manage Broker Bills", "Manage Agents", "Add Buyer" , "List and Manage Buyers", "View and Edit Bills", "Statistics", "View Deleted Seller Bills", "Create and View Users"])
+    page = st.sidebar.selectbox("Choose a page", ["Initiate Broker Bill","View Broker Bills", "Manage Broker Bills", "Manage Agents", "Add Buyer" , "List and Manage Buyers", "View and Edit Bills", "Statistics", "View Deleted Seller Bills", "Create and View Users", "view bills based on selected broker buyer seller"])
 
     if page == "View and Edit Bills":
         view_and_edit_bills()
@@ -1120,6 +1207,8 @@ def main():
         manage_agents()
     elif page == "View Broker Bills":
         view_broker_bills()
+    elif page=="view bills based on selected broker buyer seller":
+        view_bills_based_on_selected_broker_buyer_seller()
 
 if __name__ == "__main__":
     main()
