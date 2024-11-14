@@ -1,7 +1,7 @@
 #!/bin/bash
-iptables -P INPUT ACCEPT
-iptables -P FORWARD ACCEPT
-iptables -P OUTPUT ACCEPT
+# iptables -P INPUT ACCEPT
+# iptables -P FORWARD ACCEPT
+# iptables -P OUTPUT ACCEPT
 
 # Kill any processes running on ports 8501 and 8502
 fuser -k 8501/tcp

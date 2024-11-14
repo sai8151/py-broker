@@ -58,7 +58,8 @@ CREATE TABLE broker_bills (
     order_number TEXT,
     total_tons REAL,
     seller_id TEXT,
-    buyer_id TEXT, status TEXT DEFAULT 'not accepted',
+    buyer_id TEXT, 
+    status TEXT DEFAULT 'not accepted',
     FOREIGN KEY (agent_id) REFERENCES agents(id),
     FOREIGN KEY (seller_id) REFERENCES users(seller_id),
     FOREIGN KEY (buyer_id) REFERENCES buyers(id)

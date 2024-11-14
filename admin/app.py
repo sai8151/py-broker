@@ -1104,80 +1104,55 @@ def view_bills_based_on_selected_broker_buyer_seller():
         buyers = session.execute(text("SELECT id, billing_name FROM buyers")).fetchall()
         sellers = session.execute(text("SELECT seller_id, seller_name FROM users")).fetchall()
         agents = session.execute(text("SELECT id, name FROM agents")).fetchall()
-
         # Convert query results to dataframes
         buyers_df = pd.DataFrame(buyers, columns=['id', 'billing_name'])
         sellers_df = pd.DataFrame(sellers, columns=['seller_id', 'seller_name'])
         agents_df = pd.DataFrame(agents, columns=['id', 'name'])
-
+        st.write(agents_df, sellers_df, buyers_df)
         # Selection inputs
         selected_buyer = st.selectbox("Select Buyer", buyers_df['billing_name'])
-        selected_seller = st.selectbox("Select Seller", sellers_df['seller_name'])
+        selected_seller = st.selectbox("Select Seller", sellers_df['seller_id'])
         selected_agent = st.selectbox("Select Agent", agents_df['name'])
-
+        st.write(selected_buyer,',',selected_seller,',',selected_agent)
         start_date = st.date_input("Start Date", date.today())
         end_date = st.date_input("End Date", date.today())
 
-        # Fetch selected buyer, seller, and agent IDs
-        buyer_id = buyers_df[buyers_df['billing_name'] == selected_buyer]['id'].values[0]
-        seller_id = sellers_df[sellers_df['seller_name'] == selected_seller]['seller_id'].values[0]
-        agent_id = agents_df[agents_df['name'] == selected_agent]['id'].values[0]
+        selected_agent_id = agents_df.loc[agents_df['name'] == selected_agent, 'id'].values[0]
+        st.write(selected_agent_id)
+        test=session.execute(text("select * from sellerBill where billing_name='T S Rajmane' and seller_id='MiryalGuda' and date_of_invoice BETWEEN '2024-10-19' and '2024-10-19'")).fetchall()
+        st.write(pd.DataFrame(test))
 
-        # Fetch broker_bill_id based on selected buyer, seller, and agent
-        broker_bill = session.execute(text("""
-            SELECT id
-            FROM broker_bills
-            WHERE buyer_id = :buyer_id
-            AND seller_id = :seller_id
-            AND agent_id = :agent_id
-        """), {'buyer_id': str(buyer_id), 'seller_id': str(seller_id), 'agent_id': int(agent_id)}).fetchone()
-        st.write(broker_bill)
-        if broker_bill:
-            broker_bill_id = broker_bill[0]
+        # Find the selected agent's ID
+        selected_agent_id = agents_df.loc[agents_df['name'] == selected_agent, 'id'].values[0]
+        
+        st.write("billing name: ", selected_buyer)
+        st.write("seller id: ", selected_seller)
+        st.write("agent id: ",selected_agent_id)
+        
+        # Dynamic SQL query using placeholders
+        query = text("""
+            SELECT * 
+            FROM sellerBill 
+            WHERE billing_name = :selected_buyer 
+              AND seller_id = :selected_seller 
+              AND agent_id = :selected_agent_id
+              AND date_of_invoice BETWEEN :start_date AND :end_date
+        """)
 
-            query = text("""
-            SELECT *
-            FROM sellerBill
-            WHERE broker_bill_id = :broker_bill_id
-            AND date_of_invoice BETWEEN :start_date AND :end_date
-            """)
+        # Execute the query with dynamic parameters
+        result = session.execute(
+            query,
+            {
+                'selected_buyer': selected_buyer,
+                'selected_seller': selected_seller,
+                'selected_agent_id': selected_agent_id,
+                'start_date': (start_date),
+                'end_date': (end_date)
+            }
+        ).fetchall()
 
-            # Debug output
-            st.write("Broker Bill ID:", broker_bill_id)
-
-            # Convert date inputs to strings in 'YYYY-MM-DD' format
-            start_date_str = start_date.strftime('%Y-%m-%d')
-            end_date_str = end_date.strftime('%Y-%m-%d')
-
-            # Debug output
-            st.write("Start Date:", start_date_str)
-            st.write("End Date:", end_date_str)
-
-            # Execute the query with the correct data types
-            bills = session.execute(query, {
-                'broker_bill_id': broker_bill_id, 
-                'start_date': start_date_str,
-                'end_date': end_date_str
-            }).fetchall()
-
-            st.write(query)
-            if bills:
-                # Convert result to dataframe for display
-                bills_df = pd.DataFrame(bills)
-                st.write("### Bills for the selected filters")
-                st.dataframe(bills_df)
-
-                # Calculate total bags and amount
-                total_bags = bills_df['product_bags'].sum()
-                total_amount = bills_df['total_amount'].sum()
-
-                # Display total bags and amount
-                st.write(f"**Total Bags**: {total_bags}")
-                st.write(f"**Total Amount**: {total_amount}")
-            else:
-                st.write("No bills found for the selected criteria")
-        else:
-            st.write("No broker bill found for the selected buyer, seller, and agent")
+        # Convert result to DataFrame for display
+        st.write(pd.DataFrame(result))
     except Exception as e:
         st.error(f"Error retrieving bills: {e}")
     finally:
