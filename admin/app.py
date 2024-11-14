@@ -1102,59 +1102,70 @@ def view_bills_based_on_selected_broker_buyer_seller():
     try:
         # Fetch available buyers, sellers, and agents
         buyers = session.execute(text("SELECT id, billing_name FROM buyers")).fetchall()
-        sellers = session.execute(text("SELECT seller_id, seller_name FROM users")).fetchall()
+        sellers = session.execute(text("SELECT id, seller_name FROM users")).fetchall()
         agents = session.execute(text("SELECT id, name FROM agents")).fetchall()
-        # Convert query results to dataframes
-        buyers_df = pd.DataFrame(buyers, columns=['id', 'billing_name'])
-        sellers_df = pd.DataFrame(sellers, columns=['seller_id', 'seller_name'])
-        agents_df = pd.DataFrame(agents, columns=['id', 'name'])
-        st.write(agents_df, sellers_df, buyers_df)
-        # Selection inputs
-        selected_buyer = st.selectbox("Select Buyer", buyers_df['billing_name'])
-        selected_seller = st.selectbox("Select Seller", sellers_df['seller_id'])
-        selected_agent = st.selectbox("Select Agent", agents_df['name'])
-        st.write(selected_buyer,',',selected_seller,',',selected_agent)
-        start_date = st.date_input("Start Date", date.today())
-        end_date = st.date_input("End Date", date.today())
 
-        selected_agent_id = agents_df.loc[agents_df['name'] == selected_agent, 'id'].values[0]
-        st.write(selected_agent_id)
-        test=session.execute(text("select * from sellerBill where billing_name='T S Rajmane' and seller_id='MiryalGuda' and date_of_invoice BETWEEN '2024-10-19' and '2024-10-19'")).fetchall()
-        st.write(pd.DataFrame(test))
+        # Convert results to lists for Streamlit selection
+        buyer_options = [(b['id'], b['billing_name']) for b in buyers]
+        seller_options = [(s['id'], s['seller_name']) for s in sellers]
+        agent_options = [(a['id'], a['name']) for a in agents]
 
-        # Find the selected agent's ID
-        selected_agent_id = agents_df.loc[agents_df['name'] == selected_agent, 'id'].values[0]
+        # Streamlit selection for filtering
+        selected_buyer = st.selectbox("Select Buyer", options=buyer_options, format_func=lambda x: x[1], key="buyer")
+        selected_seller = st.selectbox("Select Seller", options=seller_options, format_func=lambda x: x[1], key="seller")
+        selected_agent = st.selectbox("Select Broker/Agent", options=agent_options, format_func=lambda x: x[1], key="agent")
         
-        st.write("billing name: ", selected_buyer)
-        st.write("seller id: ", selected_seller)
-        st.write("agent id: ",selected_agent_id)
-        
-        # Dynamic SQL query using placeholders
+        # Date range selectors for date_of_invoice
+        start_date = st.date_input("Start Date", value=None, key="start_date")
+        end_date = st.date_input("End Date", value=None, key="end_date")
+
+        # SQL query to join sellerBill and broker_bills with selected criteria
         query = text("""
-            SELECT * 
-            FROM sellerBill 
-            WHERE billing_name = :selected_buyer 
-              AND seller_id = :selected_seller 
-              AND agent_id = :selected_agent_id
-              AND date_of_invoice BETWEEN :start_date AND :end_date
+            SELECT 
+                sb.id AS seller_bill_id, sb.seller_id AS seller_bill_seller_id, sb.broker_bill_id AS sb_broker_bill_id, 
+                sb.agent_id AS seller_bill_agent_id, sb.driver_name, sb.driver_phone_number, sb.vehicle_number, 
+                sb.transport_name, sb.reverse_charges, sb.invoice_number, sb.date_of_invoice, sb.delivery_date, 
+                sb.waybill_number, sb.mep_number, sb.billing_name AS sb_billing_name, sb.billing_address AS sb_billing_address, 
+                sb.billing_city AS sb_billing_city, sb.billing_state AS sb_billing_state, sb.billing_phone_number AS sb_billing_phone, 
+                sb.billing_gst_number AS sb_billing_gst, sb.shipping_name AS sb_shipping_name, sb.shipping_address AS sb_shipping_address, 
+                sb.shipping_city AS sb_shipping_city, sb.shipping_state AS sb_shipping_state, sb.shipping_phone_number AS sb_shipping_phone, 
+                sb.shipping_gst_number AS sb_shipping_gst, sb.broker_name AS sb_broker_name, sb.total_amount AS sb_total_amount, 
+                sb.bank_name_1, sb.bank_account_number_1, sb.ifsc_code_1, sb.bank_name_2, sb.bank_account_number_2, sb.ifsc_code_2, 
+                sb.brokerage, sb.status AS sb_status, u.seller_name AS seller_name,
+
+                bb.id AS broker_bill_id, bb.order_date AS bb_order_date, bb.order_number AS bb_order_number, 
+                bb.total_tons AS bb_total_tons, bb.status AS bb_status, b.billing_name AS buyer_billing_name, 
+                a.name AS agent_name
+                
+            FROM sellerBill AS sb
+            JOIN broker_bills AS bb ON sb.broker_bill_id = bb.id
+            JOIN users AS u ON sb.seller_id = u.seller_id
+            JOIN buyers AS b ON bb.buyer_id = b.id
+            JOIN agents AS a ON bb.agent_id = a.id
+            WHERE (:buyer_id IS NULL OR bb.buyer_id = :buyer_id)
+            AND (:seller_id IS NULL OR u.id = :seller_id)
+            AND (:agent_id IS NULL OR a.id = :agent_id)
+            AND (:start_date IS NULL OR sb.date_of_invoice >= :start_date)
+            AND (:end_date IS NULL OR sb.date_of_invoice <= :end_date)
         """)
 
-        # Execute the query with dynamic parameters
-        result = session.execute(
-            query,
-            {
-                'selected_buyer': selected_buyer,
-                'selected_seller': selected_seller,
-                'selected_agent_id': selected_agent_id,
-                'start_date': (start_date),
-                'end_date': (end_date)
-            }
-        ).fetchall()
+        # Execute query with selected parameters
+        bills = session.execute(query, {
+            'buyer_id': selected_buyer[0] if selected_buyer else None,
+            'seller_id': selected_seller[0] if selected_seller else None,
+            'agent_id': selected_agent[0] if selected_agent else None,
+            'start_date': start_date,
+            'end_date': end_date
+        }).fetchall()
 
-        # Convert result to DataFrame for display
-        st.write(pd.DataFrame(result))
-    except Exception as e:
-        st.error(f"Error retrieving bills: {e}")
+        # Convert result to a DataFrame for display
+        if bills:
+            # Convert result rows to a DataFrame with column names
+            df = pd.DataFrame(bills, columns=bills[0].keys())
+            st.write(df)
+        else:
+            st.write("No bills found for the selected criteria.")
+
     finally:
         session.close()
 
